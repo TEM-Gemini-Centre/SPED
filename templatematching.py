@@ -13,6 +13,7 @@ logger.addHandler(ch)
 
 import argparse
 from contextlib import redirect_stdout
+from os import devnull
 from pathlib import Path
 import hyperspy.api as hs
 import pyxem as pxm
@@ -171,9 +172,8 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 logger.debug(f'Calculating library with parameters:\n{table}')
 
                 # Redirect std out due to progressbars clogging up the console output
-                with open('library_log.txt', 'w') as f:
-                    with redirect_stdout(f):
-                        diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
+                with redirect_stdout(devnull):
+                    diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
 
                 # Extract simulations
                 phase = list(diff_lib.keys())[0]
@@ -182,13 +182,12 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 # Template match the image with the new library. Output is (indices, angles, correlations, signs), and is stored in the results array
 
                 #Redirect std out due to progressbars clogging up the console output
-                with open('matching_log.txt', 'w') as f:
-                    with redirect_stdout(f):
-                        results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
-                                                                                       :] = iutls.get_n_best_matches(
-                            image.data,
-                            simulations,
-                            **matching_kwargs)
+                with redirect_stdout(devnull):
+                    results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
+                                                                                   :] = iutls.get_n_best_matches(
+                        image.data,
+                        simulations,
+                        **matching_kwargs)
 
             except ValueError as e:
                 logger.error(
@@ -250,9 +249,8 @@ def template_matching(signal, library, symmetries=None, **kwargs):
     logger.debug(f'Matching {signal!r} with kwargs:\n{table}')
 
     # Redirect stdout due to progressbars clogging up the console output
-    with open('matching_log.txt', 'w') as f:
-        with redirect_stdout(f):
-            result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
+    with redirect_stdout(devnull):
+        result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
 
     logger.debug('Creating crystal map from results')
     xmap = iutls.results_dict_to_crystal_map(result, phasedict, diffraction_library=library)
