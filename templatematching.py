@@ -12,7 +12,8 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 import argparse
-from contextlib import redirect_stdout
+from tqdm import tqdm
+from contextlib import redirect_stdout, redirect_stderr
 from os import devnull
 from pathlib import Path
 import hyperspy.api as hs
@@ -131,6 +132,7 @@ def optimize_library(image, library_generator, structure_library, scales, excita
     :param excitation_errors: The excitation_errors to perform template matching for
     :param max_radius: The maximum radius in pixels used in template matching
     :param library_kwargs: Keyword arguments passed to the library generator
+    :param show_progressbar: Whether to show progressbars during the optimization process or not.
     :param matching_kwargs: Keyword arguments passed to the matching function
     :type image: pyxem.signals.ElectronDiffraction2D
     :type library_generator: diffsims.generators.library_generator.DiffractionLibraryGenerator
@@ -138,6 +140,7 @@ def optimize_library(image, library_generator, structure_library, scales, excita
     :type scales: array-like
     :type excitation_errors: array-like
     :type max_radius: Union[None, float]
+    :type show_progressbar: bool
     :returns: optimized_scale, optimized_s, optimized_library, optimization_signal
     :rtype: tuple
     """
@@ -172,7 +175,7 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 logger.debug(f'Calculating library with parameters:\n{table}')
 
                 # Redirect std out due to progressbars clogging up the console output
-                with redirect_stdout(devnull):
+                with tqdm.external_write_mode():
                     diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
 
                 # Extract simulations
@@ -181,13 +184,14 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 logger.debug(f'Matching templates for phase {phase}')
                 # Template match the image with the new library. Output is (indices, angles, correlations, signs), and is stored in the results array
 
-                #Redirect std out due to progressbars clogging up the console output
-                with redirect_stdout(devnull):
+                # Redirect std out due to progressbars clogging up the console output
+                with tqdm.external_write_mode():
                     results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
                                                                                    :] = iutls.get_n_best_matches(
                         image.data,
                         simulations,
                         **matching_kwargs)
+
 
             except ValueError as e:
                 logger.error(
@@ -215,28 +219,31 @@ def optimize_library(image, library_generator, structure_library, scales, excita
 
     # Simulate the best template library "again"
     logger.debug('Simulating optimized library')
-    diff_lib = library_generator.get_diffraction_library(structure_library,
-                                                         calibration=optimized_scale,
-                                                         reciprocal_radius=optimized_scale * (
-                                                                 image.axes_manager.signal_shape[0] // 2),
-                                                         half_shape=image.axes_manager.signal_shape[0] // 2,
-                                                         with_direct_beam=False,
-                                                         max_excitation_error=optimized_s)
+    with tqdm.external_write_mode():
+        diff_lib = library_generator.get_diffraction_library(structure_library,
+                                                             calibration=optimized_scale,
+                                                             reciprocal_radius=optimized_scale * (
+                                                                     image.axes_manager.signal_shape[0] // 2),
+                                                             half_shape=image.axes_manager.signal_shape[0] // 2,
+                                                             with_direct_beam=False,
+                                                             max_excitation_error=optimized_s)
 
     return optimized_scale, optimized_s, diff_lib, results_signal
 
 
-def template_matching(signal, library, symmetries=None, **kwargs):
+def template_matching(signal, library, symmetries=None, show_progressbar=False, **kwargs):
     """
     Perform template matching on a signal
     :param signal: The signal to templatematch
     :param library: The library to match with
     :param symmetries: Dictionary with symmetries ({'label': orix.quaternion.symmetry}) for the different phases
+    :param show_progressbar: Whether to show progressbar during matching or not.
     :param kwargs: Keyword arguments passed to pyxem.utils.indexaton_utils.index_dataset_with_template_rotation
     :return: crystal map with matching results
     :type signal: pyxem.signals.ElectronDiffraction2D
     :type library: diffsims.libraries.diffraction_library.DiffractionLibrary
     :type symmetries: Union[None, dict]
+    :type show_progressbar: bool
     """
     if not isinstance(signal, pxm.signals.ElectronDiffraction2D):
         logger.debug(f'Signal {signal!r} did not pass type test')
@@ -249,8 +256,12 @@ def template_matching(signal, library, symmetries=None, **kwargs):
     logger.debug(f'Matching {signal!r} with kwargs:\n{table}')
 
     # Redirect stdout due to progressbars clogging up the console output
-    with redirect_stdout(devnull):
+    if show_progressbar:
         result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
+    else:
+        with open(devnull, 'w') as f:
+            with redirect_stdout(f):
+                result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
 
     logger.debug('Creating crystal map from results')
     xmap = iutls.results_dict_to_crystal_map(result, phasedict, diffraction_library=library)
@@ -342,6 +353,8 @@ if __name__ == '__main__':
                                 help='The scheduler used by dask to compute the result. "processes" is not recommended.')
     matching_group.add_argument('--precision', type=str, default='float32',
                                 help='The level of precision to work with on internal calculations')
+    matching_group.add_argument('--show_matching_progressbar', action='store_true',
+                                help='SHow the progressbar from template matching algorithm during matching. This might clog up output when run on a cluster')
     # WIP
     matching_group.add_argument('--intensity_transform_function', type=str, default=None,
                                 help='Path to a python script defining a function to apply to both images and templates when performing matching. Currently a WIP')
@@ -519,7 +532,8 @@ if __name__ == '__main__':
                                                                   max_excitation_error=arguments.max_s)
 
     logger.info('Starting template matching...')
-    xmap = template_matching(signal, diffraction_library, **matching_kwargs)
+    xmap = template_matching(signal, diffraction_library, show_progressbar=arguments.show_matching_progressbar,
+                             **matching_kwargs)
     logger.info('Finished template matching...')
 
     logger.debug(f'Template matching results:\n{xmap}')
