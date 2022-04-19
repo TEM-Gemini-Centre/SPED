@@ -152,14 +152,14 @@ def optimize_library(image, library_generator, structure_library, scales, excita
 
     results = np.zeros((len(scales), len(excitation_errors), 4, n_best))
     half_shape = max(image.axes_manager.signal_shape) // 2
-    logger.debug(f'Optimizing library with half shape {half_shape}')
+    logger.info(f'Optimizing library with half shape {half_shape}')
 
     if library_kwargs is None:
         library_kwargs = {}
 
     for i, scale in enumerate(scales):
         for j, excitation_error in enumerate(excitation_errors):
-            logger.debug(f'Simulating pattern ({i}, {j}) with scale {scale} and excitation error {excitation_error}')
+            logger.info(f'Simulating pattern ({i}, {j}) with scale {scale} and excitation error {excitation_error}')
             try:
                 if max_radius is None:
                     reciprocal_radius = scale * half_shape
@@ -171,8 +171,8 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 library_kwargs['half_shape'] = half_shape
                 library_kwargs['max_excitation_error'] = excitation_error
 
-                table = tabulate([[key, f'{library_kwargs[key]}'] for key in library_kwargs])
-                logger.debug(f'Calculating library with parameters:\n{table}')
+                #table = tabulate([[key, f'{library_kwargs[key]}'] for key in library_kwargs])
+                #logger.debug(f'Calculating library with parameters:\n{table}')
 
                 # Redirect std out due to progressbars clogging up the console output
                 with tqdm.external_write_mode():
@@ -181,7 +181,7 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 # Extract simulations
                 phase = list(diff_lib.keys())[0]
                 simulations = diff_lib[phase]["simulations"]
-                logger.debug(f'Matching templates for phase {phase}')
+                logger.info(f'Matching templates for phase {phase}')
                 # Template match the image with the new library. Output is (indices, angles, correlations, signs), and is stored in the results array
 
                 # Redirect std out due to progressbars clogging up the console output
@@ -215,10 +215,10 @@ def optimize_library(image, library_generator, structure_library, scales, excita
     optimum_scale, optimum_s = np.where(results[:, :, 2, 0] == np.max(results[:, :, 2, 0]))
     optimized_scale = scales[optimum_scale][0]
     optimized_s = excitation_errors[optimum_s][0]
-    logger.info(f'Library optimization results:\n\tscale = {optimum_scale}\n\texcitation_error = {optimized_s}')
+    logger.info(f'Library optimization results:\n\tscale = {optimized_scale}\n\texcitation_error = {optimized_s}')
 
     # Simulate the best template library "again"
-    logger.debug('Simulating optimized library')
+    logger.info('Simulating optimized library')
     with tqdm.external_write_mode():
         diff_lib = library_generator.get_diffraction_library(structure_library,
                                                              calibration=optimized_scale,
@@ -253,7 +253,7 @@ def template_matching(signal, library, symmetries=None, show_progressbar=False, 
         logger.debug(f'Signal {signal!r} passed type test')
 
     table = tabulate([[key, kwargs[key]] for key in kwargs], headers=['Parameter', 'Value'])
-    logger.debug(f'Matching {signal!r} with kwargs:\n{table}')
+    logger.info(f'Matching {signal!r} with kwargs:\n{table}')
 
     # Redirect stdout due to progressbars clogging up the console output
     if show_progressbar:
@@ -263,7 +263,7 @@ def template_matching(signal, library, symmetries=None, show_progressbar=False, 
             with redirect_stdout(f):
                 result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
 
-    logger.debug('Creating crystal map from results')
+    logger.info('Creating crystal map from results')
     xmap = iutls.results_dict_to_crystal_map(result, phasedict, diffraction_library=library)
     if symmetries is not None:
         logger.debug('Setting symmetries of crystal map')
@@ -403,7 +403,7 @@ if __name__ == '__main__':
     }
 
     # Set up diffraction and library generator
-    logger.debug(f'Setting up diffraction library generator')
+    logger.info(f'Setting up diffraction library generator')
     diff_gen_kwargs = {}
     if arguments.acceleration_voltage is None:
         diff_gen_kwargs['accelerating_voltage'] = signal.metadata.Acquisition_instrument.TEM.beam_energy
@@ -422,9 +422,9 @@ if __name__ == '__main__':
     lib_gen = DiffractionLibraryGenerator(diff_gen)
 
     # Load template or structure library
-    logger.debug(f'Loading library from {arguments.library.absolute()}')
+    logger.info(f'Loading library from {arguments.library.absolute()}')
     library = load_pickle(arguments.library)
-    logger.debug(f'Library is type {type(library)}')
+    logger.info(f'Library is type {type(library)}')
     if isinstance(library, DiffractionLibrary):
         diffraction_library = library
         structure_library = None
@@ -434,11 +434,11 @@ if __name__ == '__main__':
     else:
         raise TypeError(
             f'Library {library!r} of type {type(library)} not understood. It should either be a DiffractionLibrary or a StructureLibrary')
-    logger.debug(
+    logger.info(
         f'Using libraries:\n{tabulate([["Diffraction", type(diffraction_library)], ["Structure", type(structure_library)]], headers=("Library", "Type"))}')
 
     if arguments.optimize_scale or arguments.optimize_scale:
-        logger.debug(f'Library will be optimized. Setting up optimization parameters')
+        logger.info(f'Library will be optimized. Setting up optimization parameters')
         if structure_library is None:
             raise TypeError(
                 'Cannot perform library optimization without a structure library. Please specify a path to a pickled StructureLibrary object as the `library` parameter.')
@@ -484,7 +484,7 @@ if __name__ == '__main__':
             logger.debug(f'Using single specified scale {arguments.scale}')
             scales = np.array([arguments.scale])
 
-        logger.debug(f'Getting image from {signal!r} at inav={arguments.inav}')
+        logger.info(f'Getting image from {signal!r} at inav={arguments.inav} for library optimization')
         image = signal.inav[arguments.inav]
         logger.info(f'Optimizing library')
         # Set up optimization matching kwargs
@@ -510,7 +510,7 @@ if __name__ == '__main__':
             f'Optimized parameters:\n{tabulate([["Scale", optimized_scale], ["s", optimized_s]], headers=["Parameter", "Value"])}')
 
         opt_path = Path(f'{input_name.absolute().parent}/{input_name.stem}_library_optimization.hspy')
-        logger.debug(f'Saving optimization result to "{opt_path.absolute()}"')
+        logger.info(f'Saving optimization result to "{opt_path.absolute()}"')
         results_signal.save(opt_path, overwrite=True)
     else:
         if diffraction_library is None:
