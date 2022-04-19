@@ -1,7 +1,7 @@
 import logging
 
 # basic config must be done before loading other packages
-#logger.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
+# logger.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
 logger = logging.getLogger(__file__)
 logger.propagate = False
 logger.setLevel(logging.DEBUG)
@@ -12,6 +12,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 import argparse
+from contextlib import redirect_stdout
 from pathlib import Path
 import hyperspy.api as hs
 import pyxem as pxm
@@ -169,17 +170,25 @@ def optimize_library(image, library_generator, structure_library, scales, excita
                 table = tabulate([[key, f'{library_kwargs[key]}'] for key in library_kwargs])
                 logger.debug(f'Calculating library with parameters:\n{table}')
 
-                diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
+                # Redirect std out due to progressbars clogging up the console output
+                with open('library_log.txt', 'w') as f:
+                    with redirect_stdout(f):
+                        diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
 
                 # Extract simulations
                 phase = list(diff_lib.keys())[0]
                 simulations = diff_lib[phase]["simulations"]
                 logger.debug(f'Matching templates for phase {phase}')
                 # Template match the image with the new library. Output is (indices, angles, correlations, signs), and is stored in the results array
-                results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
-                                                                               :] = iutls.get_n_best_matches(image.data,
-                                                                                                             simulations,
-                                                                                                             **matching_kwargs)
+
+                #Redirect std out due to progressbars clogging up the console output
+                with open('matching_log.txt', 'w') as f:
+                    with redirect_stdout(f):
+                        results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
+                                                                                       :] = iutls.get_n_best_matches(
+                            image.data,
+                            simulations,
+                            **matching_kwargs)
 
             except ValueError as e:
                 logger.error(
@@ -187,11 +196,14 @@ def optimize_library(image, library_generator, structure_library, scales, excita
             logger.debug(f'Done with pattern matching step ({i}, {j})')
 
     # Create a hyperspy signal for easy navigation. A little bit tricky to visualize all of the parameters due to different value scales (correlation scores are usually much lower than 1, while the angles can be from 0 to 360 I think.
-    results_signal = hs.signals.Signal2D(results, axes=[{'name': 'scale', 'navigate': False, 'size': results.shape[0], 'scale': scales[1]-scales[0], 'offset': scales[0]},
-                                                        {'name': 's', 'navigate': False, 'size': results.shape[1], 'scale': excitation_errors[1]-excitation_errors[0], 'offset': excitation_errors[0]},
-                                                        {'name': 'parameter', 'navigate': True,
-                                                         'size': results.shape[2]},
-                                                        {'name': 'match', 'navigate': True, 'size': results.shape[3]}])
+    results_signal = hs.signals.Signal2D(results, axes=[
+        {'name': 'scale', 'navigate': False, 'size': results.shape[0], 'scale': scales[1] - scales[0],
+         'offset': scales[0]},
+        {'name': 's', 'navigate': False, 'size': results.shape[1], 'scale': excitation_errors[1] - excitation_errors[0],
+         'offset': excitation_errors[0]},
+        {'name': 'parameter', 'navigate': True,
+         'size': results.shape[2]},
+        {'name': 'match', 'navigate': True, 'size': results.shape[3]}])
     results_signal.metadata.General.title = 'Template matching optimization results'
     results_signal.metadata.add_dictionary({'About': {
         'Parameters': {'0': 'Template index', '1': 'In-plane rotation', '2': 'Correlation score', '3': 'Sign'}}})
@@ -236,7 +248,11 @@ def template_matching(signal, library, symmetries=None, **kwargs):
 
     table = tabulate([[key, kwargs[key]] for key in kwargs], headers=['Parameter', 'Value'])
     logger.debug(f'Matching {signal!r} with kwargs:\n{table}')
-    result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
+
+    # Redirect stdout due to progressbars clogging up the console output
+    with open('matching_log.txt', 'w') as f:
+        with redirect_stdout(f):
+            result, phasedict = iutls.index_dataset_with_template_rotation(signal, library, **kwargs)
 
     logger.debug('Creating crystal map from results')
     xmap = iutls.results_dict_to_crystal_map(result, phasedict, diffraction_library=library)
@@ -272,8 +288,10 @@ if __name__ == '__main__':
     optimization_group.add_argument('--maximum_scale', type=float, help='Maximum scale to use for optimization')
     optimization_group.add_argument('--n_scale', default=100, type=int,
                                     help='Number of scales to use for optimization.')
-    optimization_group.add_argument('--minimum_s', default=0.01, type=float, help='Minimum excitation error to use for optimization')
-    optimization_group.add_argument('--maximum_s', default=1.0, type=float, help='Maximum excitation error to use for optimization')
+    optimization_group.add_argument('--minimum_s', default=0.01, type=float,
+                                    help='Minimum excitation error to use for optimization')
+    optimization_group.add_argument('--maximum_s', default=1.0, type=float,
+                                    help='Maximum excitation error to use for optimization')
     optimization_group.add_argument('--n_s', default=100, type=int,
                                     help='Number of excitation errors to use for optimization')
     optimization_group.add_argument('--inav', default=[0, 0], type=int, nargs=2,
@@ -458,7 +476,7 @@ if __name__ == '__main__':
         logger.debug(f'Getting image from {signal!r} at inav={arguments.inav}')
         image = signal.inav[arguments.inav]
         logger.info(f'Optimizing library')
-        #Set up optimization matching kwargs
+        # Set up optimization matching kwargs
         optimization_matching_kwargs = matching_kwargs.copy()
         del optimization_matching_kwargs['phases']
         optimization_matching_kwargs['find_direct_beam'] = False
