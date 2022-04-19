@@ -187,8 +187,8 @@ def optimize_library(image, library_generator, structure_library, scales, excita
             logger.debug(f'Done with pattern matching step ({i}, {j})')
 
     # Create a hyperspy signal for easy navigation. A little bit tricky to visualize all of the parameters due to different value scales (correlation scores are usually much lower than 1, while the angles can be from 0 to 360 I think.
-    results_signal = hs.signals.Signal2D(results, axes=[{'name': 'scale', 'navigate': False, 'size': results.shape[0]},
-                                                        {'name': 's', 'navigate': False, 'size': results.shape[1]},
+    results_signal = hs.signals.Signal2D(results, axes=[{'name': 'scale', 'navigate': False, 'size': results.shape[0], 'scale': scales[1]-scales[0], 'offset': scales[0]},
+                                                        {'name': 's', 'navigate': False, 'size': results.shape[1], 'scale': excitation_errors[1]-excitation_errors[0], 'offset': excitation_errors[0]},
                                                         {'name': 'parameter', 'navigate': True,
                                                          'size': results.shape[2]},
                                                         {'name': 'match', 'navigate': True, 'size': results.shape[3]}])
