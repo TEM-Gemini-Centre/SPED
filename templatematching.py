@@ -120,117 +120,6 @@ def simulations_to_signal(simulations, pattern_size, scale):
     return simulated_patterns
 
 
-def optimize_library(image, library_generator, structure_library, scales, excitation_errors, max_radius=None,
-                     library_kwargs=None, **matching_kwargs):
-    """
-    Optimize library calibration and excitation error based on a single image.
-
-    :param image: The diffraction pattern to optimize the library for
-    :param library_generator: Library generator to use to generate libraries
-    :param structure_library: The structure library to use when generating templates
-    :param scales: The scales to perform template matching for
-    :param excitation_errors: The excitation_errors to perform template matching for
-    :param max_radius: The maximum radius in pixels used in template matching
-    :param library_kwargs: Keyword arguments passed to the library generator
-    :param show_progressbar: Whether to show progressbars during the optimization process or not.
-    :param matching_kwargs: Keyword arguments passed to the matching function
-    :type image: pyxem.signals.ElectronDiffraction2D
-    :type library_generator: diffsims.generators.library_generator.DiffractionLibraryGenerator
-    :type structure_library: diffsims.libraries.structure_library.StructureLibrary
-    :type scales: array-like
-    :type excitation_errors: array-like
-    :type max_radius: Union[None, float]
-    :type show_progressbar: bool
-    :returns: optimized_scale, optimized_s, optimized_library, optimization_signal
-    :rtype: tuple
-    """
-
-    n_best = matching_kwargs.get('n_best', 5)
-    matching_kwargs['n_best'] = n_best
-    table = tabulate([[key, matching_kwargs[key]] for key in matching_kwargs], headers=("Parameter", "Value"))
-    logger.debug(f'Keyword arguments for template matching:\n{table}')
-
-    results = np.zeros((len(scales), len(excitation_errors), 4, n_best))
-    half_shape = max(image.axes_manager.signal_shape) // 2
-    logger.info(f'Optimizing library with half shape {half_shape}')
-
-    if library_kwargs is None:
-        library_kwargs = {}
-
-    for i, scale in enumerate(scales):
-        for j, excitation_error in enumerate(excitation_errors):
-            logger.info(f'Simulating pattern ({i}, {j}) with scale {scale} and excitation error {excitation_error}')
-            try:
-                if max_radius is None:
-                    reciprocal_radius = scale * half_shape
-                else:
-                    reciprocal_radius = scale * max_radius
-                # Calculate library
-                library_kwargs['calibration'] = scale
-                library_kwargs['reciprocal_radius'] = reciprocal_radius
-                library_kwargs['half_shape'] = half_shape
-                library_kwargs['max_excitation_error'] = excitation_error
-
-                #table = tabulate([[key, f'{library_kwargs[key]}'] for key in library_kwargs])
-                #logger.debug(f'Calculating library with parameters:\n{table}')
-
-                # Redirect std out due to progressbars clogging up the console output
-                with tqdm.external_write_mode():
-                    diff_lib = library_generator.get_diffraction_library(structure_library, **library_kwargs)
-
-                # Extract simulations
-                phase = list(diff_lib.keys())[0]
-                simulations = diff_lib[phase]["simulations"]
-                logger.info(f'Matching templates for phase {phase}')
-                # Template match the image with the new library. Output is (indices, angles, correlations, signs), and is stored in the results array
-
-                # Redirect std out due to progressbars clogging up the console output
-                with tqdm.external_write_mode():
-                    results[i, j, 0, :], results[i, j, 1, :], results[i, j, 2, :], results[i, j, 3,
-                                                                                   :] = iutls.get_n_best_matches(
-                        image.data,
-                        simulations,
-                        **matching_kwargs)
-
-
-            except ValueError as e:
-                logger.error(
-                    f'Simulation ({i}, {j}) with scale={scale:.2e} and excitation error {excitation_error:.2e} failed with error {e}. Passing and continuing with next simulations')
-            logger.debug(f'Done with pattern matching step ({i}, {j})')
-
-    # Create a hyperspy signal for easy navigation. A little bit tricky to visualize all of the parameters due to different value scales (correlation scores are usually much lower than 1, while the angles can be from 0 to 360 I think.
-    results_signal = hs.signals.Signal2D(results, axes=[
-        {'name': 'scale', 'navigate': False, 'size': results.shape[0], 'scale': scales[1] - scales[0],
-         'offset': scales[0]},
-        {'name': 's', 'navigate': False, 'size': results.shape[1], 'scale': excitation_errors[1] - excitation_errors[0],
-         'offset': excitation_errors[0]},
-        {'name': 'parameter', 'navigate': True,
-         'size': results.shape[2]},
-        {'name': 'match', 'navigate': True, 'size': results.shape[3]}])
-    results_signal.metadata.General.title = 'Template matching optimization results'
-    results_signal.metadata.add_dictionary({'About': {
-        'Parameters': {'0': 'Template index', '1': 'In-plane rotation', '2': 'Correlation score', '3': 'Sign'}}})
-
-    # Get the optimum parameters
-    optimum_scale, optimum_s = np.where(results[:, :, 2, 0] == np.max(results[:, :, 2, 0]))
-    optimized_scale = scales[optimum_scale][0]
-    optimized_s = excitation_errors[optimum_s][0]
-    logger.info(f'Library optimization results:\n\tscale = {optimized_scale}\n\texcitation_error = {optimized_s}')
-
-    # Simulate the best template library "again"
-    logger.info('Simulating optimized library')
-    with tqdm.external_write_mode():
-        diff_lib = library_generator.get_diffraction_library(structure_library,
-                                                             calibration=optimized_scale,
-                                                             reciprocal_radius=optimized_scale * (
-                                                                     image.axes_manager.signal_shape[0] // 2),
-                                                             half_shape=image.axes_manager.signal_shape[0] // 2,
-                                                             with_direct_beam=False,
-                                                             max_excitation_error=optimized_s)
-
-    return optimized_scale, optimized_s, diff_lib, results_signal
-
-
 def template_matching(signal, library, symmetries=None, show_progressbar=False, **kwargs):
     """
     Perform template matching on a signal
@@ -277,35 +166,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('filename', type=Path, help='Path to a 4D-STEM dataset to templatematch')
-
     parser.add_argument('library', type=Path, help='Path to a pickled template library or structure library')
 
-    scale_group = parser.add_mutually_exclusive_group()
-    scale_group.add_argument('--scale', dest='scale', type=float, default=None, help='Scale to use when matching.')
-    scale_group.add_argument('--optimize_scale', dest='optimize_scale', action='store_true',
-                             help='Whether to optimize the library or not')
-
-    excitation_error_group = parser.add_mutually_exclusive_group()
-    excitation_error_group.add_argument('--max_s', dest='max_s', type=float, default=None,
-                                        help='Maximum excitation error to use when matching.')
-    excitation_error_group.add_argument('--optimize_s', dest='optimize_s', action='store_true',
-                                        help='Whether to optimize library or not')
-
-    optimization_group = parser.add_argument_group('Library optimization',
-                                                   'Parameters for controlling library optimization')
-    optimization_group.add_argument('--minimum_scale', type=float, help='Minimum scale to use for optimization')
-    optimization_group.add_argument('--maximum_scale', type=float, help='Maximum scale to use for optimization')
-    optimization_group.add_argument('--n_scale', default=100, type=int,
-                                    help='Number of scales to use for optimization.')
-    optimization_group.add_argument('--minimum_s', default=0.01, type=float,
-                                    help='Minimum excitation error to use for optimization')
-    optimization_group.add_argument('--maximum_s', default=1.0, type=float,
-                                    help='Maximum excitation error to use for optimization')
-    optimization_group.add_argument('--n_s', default=100, type=int,
-                                    help='Number of excitation errors to use for optimization')
-    optimization_group.add_argument('--inav', default=[0, 0], type=int, nargs=2,
-                                    help='Navigator indices for pattern to use for optiization')
-
+    parser.add_argument('--scale', dest='scale', type=float, default=None,
+                        help='Scale to use when creating library if a stucture library is provided rather than a diffraction library.')
+    parser.add_argument('--max_s', dest='max_s', type=float, default=None,
+                        help='Maximum excitation error to use when creating library if a stucture library is provided rather than a diffraction library')
     parser.add_argument('-l', '--lazy', dest='lazy', action='store_true', help='Whether to use lazy loading or not')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
 
@@ -355,9 +221,13 @@ if __name__ == '__main__':
                                 help='The level of precision to work with on internal calculations')
     matching_group.add_argument('--show_matching_progressbar', action='store_true',
                                 help='SHow the progressbar from template matching algorithm during matching. This might clog up output when run on a cluster')
-    # WIP
-    matching_group.add_argument('--intensity_transform_function', type=str, default=None,
-                                help='Path to a python script defining a function to apply to both images and templates when performing matching. Currently a WIP')
+    matching_group.add_argument('--intensity_transform_function', type=str, choices=['log', 'log10', 'gamma'],
+                                default=None,
+                                help='Intensity transform function to apply to images and templates during matching.')
+    matching_group.add_argument('--intensity_offset', type=float,
+                                help='Value to be added to the signal before running template matching optimization. Useful if a logarithmic intensity transform is applied to the data')
+    matching_group.add_argument('--gamma', type=float, default=0.5,
+                                help='Gamma to be used if `gamma` was selected for intensity transform function. Default is 0.5')
 
     arguments = parser.parse_args()
 
@@ -384,6 +254,25 @@ if __name__ == '__main__':
     else:
         parallel_workers = arguments.parallel_workers
 
+    # Get the intensity transform function:
+    if arguments.intensity_transform_function is None:
+        intensity_transform_function = None
+    elif arguments.intensity_transform_function == 'log':
+        intensity_transform_function = np.log
+    elif arguments.intensity_transform_function == 'log10':
+        intensity_transform_function = np.log10
+    elif arguments.intensity_transform_function == 'gamma':
+        logger.info(f'Using gamma intensity transformation function with gamma {arguments.gamma}')
+
+        def gamma(image, gamma_value=arguments.gamma):
+            return image**gamma_value
+
+        intensity_transform_function = gamma
+    else:
+
+        raise ValueError(f'Intensity transform function {arguments.intensity_transform_function} not understood.')
+    logger.debug(f'Using intensity transform function {arguments.intensity_transform_function}: {intensity_transform_function}')
+
     matching_kwargs = {
         'phases': arguments.phases,
         'n_best': arguments.n_best,
@@ -399,27 +288,8 @@ if __name__ == '__main__':
         'target': arguments.target,
         'scheduler': arguments.scheduler,
         'precision': arguments.precision,
-        'intensity_transform_function': arguments.intensity_transform_function
+        'intensity_transform_function': intensity_transform_function
     }
-
-    # Set up diffraction and library generator
-    logger.info(f'Setting up diffraction library generator')
-    diff_gen_kwargs = {}
-    if arguments.acceleration_voltage is None:
-        diff_gen_kwargs['accelerating_voltage'] = signal.metadata.Acquisition_instrument.TEM.beam_energy
-    else:
-        diff_gen_kwargs['accelerating_voltage'] = arguments.acceleration_voltage
-    if arguments.precession_angle is None:
-        diff_gen_kwargs['precession_angle'] = signal.metadata.Acquisition_instrument.TEM.rocking_angle
-    else:
-        diff_gen_kwargs['precession_angle'] = arguments.precession_angle
-    diff_gen_kwargs['scattering_params'] = arguments.scattering_params
-    diff_gen_kwargs['shape_factor_model'] = arguments.shape_factor_model
-    diff_gen_kwargs['minimum_intensity'] = arguments.minimum_intensity
-    logger.debug(
-        f'DiffractionGenerator arguments:\n{tabulate([[key, diff_gen_kwargs[key]] for key in diff_gen_kwargs], headers=("Argument", "Value"))}')
-    diff_gen = DiffractionGenerator(**diff_gen_kwargs)
-    lib_gen = DiffractionLibraryGenerator(diff_gen)
 
     # Load template or structure library
     logger.info(f'Loading library from {arguments.library.absolute()}')
@@ -437,99 +307,43 @@ if __name__ == '__main__':
     logger.info(
         f'Using libraries:\n{tabulate([["Diffraction", type(diffraction_library)], ["Structure", type(structure_library)]], headers=("Library", "Type"))}')
 
-    if arguments.optimize_scale or arguments.optimize_scale:
-        logger.info(f'Library will be optimized. Setting up optimization parameters')
-        if structure_library is None:
-            raise TypeError(
-                'Cannot perform library optimization without a structure library. Please specify a path to a pickled StructureLibrary object as the `library` parameter.')
-        if arguments.optimize_s:
-            logger.debug(f'Minimum s is {arguments.minimum_s}')
-            if arguments.minimum_s is None:
-                minimum_s = 0.01
-                logger.debug(f'Setting minimum s to predefined value {minimum_s}')
-            else:
-                minimum_s = arguments.minimum_s
+    if diffraction_library is None:
+        logger.debug(f'Creating diffraction library...')
 
-            if arguments.maximum_s is None:
-                maximum_s = 1
-                logger.debug(f'Setting maximum s to predefined value {maximum_s}')
-            else:
-                maximum_s = arguments.maximum_s
-            logger.debug(f'Creating {arguments.n_s} linearly spaced excitation errors from {minimum_s} to {maximum_s}')
-            excitation_errors = np.linspace(arguments.minimum_s, arguments.maximum_s, num=arguments.n_s)
+        # Set up diffraction and library generator
+        logger.info(f'Setting up diffraction library generator')
+        diff_gen_kwargs = {}
+        if arguments.acceleration_voltage is None:
+            diff_gen_kwargs['accelerating_voltage'] = signal.metadata.Acquisition_instrument.TEM.beam_energy
         else:
-            logger.debug(f'Using single specified excitation error {arguments.max_s}')
-            excitation_errors = np.array([arguments.max_s])
-
-        if arguments.optimize_scale:
-            logger.debug(f'Minimum scale is {arguments.minimum_scale}')
-            if arguments.minimum_scale is None:
-                minimum_scale = 0.7 * signal.axes_manager[-1].scale
-                logger.debug(
-                    f'Setting minimum scale to 70% of signal scale {signal.axes_manager[-1].scale}: {minimum_scale}')
-            else:
-                minimum_scale = arguments.minimum_scale
-
-            logger.debug(f'Maximum scale is {arguments.maximum_scale}')
-            if arguments.maximum_scale is None:
-                maximum_scale = 1.3 * signal.axes_manager[-1].scale
-                logger.debug(
-                    f'Setting minimum scale to 130% of signal scale {signal.axes_manager[-1].scale}: {maximum_scale}')
-            else:
-                maximum_scale = arguments.maximum_scale
-            logger.debug(
-                f'Creating {arguments.n_scale} linearly spaced scales from {minimum_scale} to {maximum_scale}')
-            scales = np.linspace(minimum_scale, maximum_scale, num=arguments.n_scale)
+            diff_gen_kwargs['accelerating_voltage'] = arguments.acceleration_voltage
+        if arguments.precession_angle is None:
+            diff_gen_kwargs['precession_angle'] = signal.metadata.Acquisition_instrument.TEM.rocking_angle
         else:
-            logger.debug(f'Using single specified scale {arguments.scale}')
-            scales = np.array([arguments.scale])
+            diff_gen_kwargs['precession_angle'] = arguments.precession_angle
+        diff_gen_kwargs['scattering_params'] = arguments.scattering_params
+        diff_gen_kwargs['shape_factor_model'] = arguments.shape_factor_model
+        diff_gen_kwargs['minimum_intensity'] = arguments.minimum_intensity
+        logger.debug(
+            f'DiffractionGenerator arguments:\n{tabulate([[key, diff_gen_kwargs[key]] for key in diff_gen_kwargs], headers=("Argument", "Value"))}')
+        diff_gen = DiffractionGenerator(**diff_gen_kwargs)
+        lib_gen = DiffractionLibraryGenerator(diff_gen)
 
-        logger.info(f'Getting image from {signal!r} at inav={arguments.inav} for library optimization')
-        image = signal.inav[arguments.inav]
-        logger.info(f'Optimizing library')
-        # Set up optimization matching kwargs
-        optimization_matching_kwargs = matching_kwargs.copy()
-        del optimization_matching_kwargs['phases']
-        optimization_matching_kwargs['find_direct_beam'] = False
-        optimization_matching_kwargs['normalize_image'] = optimization_matching_kwargs['normalize_images']
-        del optimization_matching_kwargs['normalize_images']
-        del optimization_matching_kwargs['chunks']
-        del optimization_matching_kwargs['parallel_workers']
-        del optimization_matching_kwargs['target']
-        del optimization_matching_kwargs['scheduler']
-        del optimization_matching_kwargs['precision']
-        optimized_scale, optimized_s, diffraction_library, results_signal = optimize_library(image, lib_gen,
-                                                                                             structure_library,
-                                                                                             scales=scales,
-                                                                                             excitation_errors=excitation_errors,
-                                                                                             max_radius=arguments.max_r,
-                                                                                             **optimization_matching_kwargs)
-        logger.info(f'Finished optimizing library')
-
-        logger.info(
-            f'Optimized parameters:\n{tabulate([["Scale", optimized_scale], ["s", optimized_s]], headers=["Parameter", "Value"])}')
-
-        opt_path = Path(f'{input_name.absolute().parent}/{input_name.stem}_library_optimization.hspy')
-        logger.info(f'Saving optimization result to "{opt_path.absolute()}"')
-        results_signal.save(opt_path, overwrite=True)
-    else:
-        if diffraction_library is None:
-            logger.debug(f'Creating diffraction library...')
+        logger.debug(
+            f'Using provided scale ({arguments.scale}) and excitation error ({arguments.max_s}) for creating diffraction library')
+        if arguments.scale is None:
+            scale = signal.axes_manager[-1].scale
             logger.debug(
-                f'Using provided scale ({arguments.scale}) and excitation error ({arguments.max_s}) for creating diffraction library')
-            if arguments.scale is None:
-                scale = signal.axes_manager[-1].scale
-                logger.debug(
-                    f'Supplied scale is {arguments.scale}. Using signal calibration {scale} as scale for templates')
-            else:
-                scale = arguments.scale
-            logger.debug(f'Using structure library to create template library')
-            diffraction_library = lib_gen.get_diffraction_library(structure_library,
-                                                                  calibration=scale,
-                                                                  reciprocal_radius=arguments.max_r * scale,
-                                                                  half_shape=signal.axes_manager.signal_shape[0] // 2,
-                                                                  with_direct_beam=arguments.with_direct_beam,
-                                                                  max_excitation_error=arguments.max_s)
+                f'Supplied scale is {arguments.scale}. Using signal calibration {scale} as scale for templates')
+        else:
+            scale = arguments.scale
+        logger.debug(f'Using structure library to create template library')
+        diffraction_library = lib_gen.get_diffraction_library(structure_library,
+                                                              calibration=scale,
+                                                              reciprocal_radius=arguments.max_r * scale,
+                                                              half_shape=signal.axes_manager.signal_shape[0] // 2,
+                                                              with_direct_beam=arguments.with_direct_beam,
+                                                              max_excitation_error=arguments.max_s)
 
     logger.info('Starting template matching...')
     xmap = template_matching(signal, diffraction_library, show_progressbar=arguments.show_matching_progressbar,
