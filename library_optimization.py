@@ -336,7 +336,10 @@ if __name__ == '__main__':
 
         logger.debug(f'Creating {arguments.n} linearly spaced excitation errors from {minimum_value} to {maximum_value}')
         excitation_error = np.linspace(minimum_value, maximum_value, num=arguments.n)
-        scale = arguments.scale
+        if arguments.scale is None:
+            scale = signal.axes_manager[-1].scale
+        else:
+            scale = arguments.scale
     else:
         logger.debug(f'Library will be optimized in terms of calibration scale')
         logger.debug(f'Minimum scale is {arguments.minimum_value}')
@@ -371,4 +374,3 @@ if __name__ == '__main__':
     opt_path = Path(f'{input_name.absolute().parent}/{input_name.stem}_library_optimization_{arguments.n}-{arguments.parameter}.hspy')
     logger.info(f'Saving optimization result to "{opt_path.absolute()}"')
     results_signal.save(opt_path, overwrite=True)
-
