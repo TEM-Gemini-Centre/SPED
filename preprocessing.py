@@ -125,7 +125,7 @@ if __name__ == '__main__':
     logger.debug(f'Changing datatype to float32')
     preprocessed_signal.change_dtype(np.float32)
     logger.info(f'Running preprocessing on {signal}')
-    preprocessed_signal.map(preprocessed_signal, **preprocessing_kwargs)
+    preprocessed_signal.map(process_image, **preprocessing_kwargs)
     logger.info(f'Added preprocessing')
 
     output_path = input_name.with_name(f'{input_name.stem}_preprocessed{input_name.suffix}')
