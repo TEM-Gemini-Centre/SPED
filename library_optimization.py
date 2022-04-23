@@ -156,9 +156,9 @@ def optimize_parameter(image, library_generator, structure_library, scale, excit
         {'name': 'parameter', 'navigate': True,
          'size': results.shape[1]},
         {'name': 'match', 'navigate': False, 'size': results.shape[2]}])
-    results_signal.metadata.General.title = 'Template matching scale optimization results'
+    results_signal.metadata.General.title = f'Template matching {parameter_name} optimization results'
     results_signal.metadata.add_dictionary({'About': {
-        'Parameters': {'0': 'Template index', '1': 'In-plane rotation', '2': 'Correlation score', '3': 'Sign'}
+        'Parameters': {'0': 'Template index', '1': 'In-plane rotation', '2': 'Correlation score', '3': 'Sign'},
     }})
 
     # Get the optimum parameters

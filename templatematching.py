@@ -308,10 +308,10 @@ if __name__ == '__main__':
         f'Using libraries:\n{tabulate([["Diffraction", type(diffraction_library)], ["Structure", type(structure_library)]], headers=("Library", "Type"))}')
 
     if diffraction_library is None:
-        logger.debug(f'Creating diffraction library...')
+        logger.info(f'Creating diffraction library...')
 
         # Set up diffraction and library generator
-        logger.info(f'Setting up diffraction library generator')
+        logger.debug(f'Setting up diffraction library generator')
         diff_gen_kwargs = {}
         if arguments.acceleration_voltage is None:
             diff_gen_kwargs['accelerating_voltage'] = signal.metadata.Acquisition_instrument.TEM.beam_energy
@@ -324,7 +324,7 @@ if __name__ == '__main__':
         diff_gen_kwargs['scattering_params'] = arguments.scattering_params
         diff_gen_kwargs['shape_factor_model'] = arguments.shape_factor_model
         diff_gen_kwargs['minimum_intensity'] = arguments.minimum_intensity
-        logger.debug(
+        logger.info(
             f'DiffractionGenerator arguments:\n{tabulate([[key, diff_gen_kwargs[key]] for key in diff_gen_kwargs], headers=("Argument", "Value"))}')
         diff_gen = DiffractionGenerator(**diff_gen_kwargs)
         lib_gen = DiffractionLibraryGenerator(diff_gen)
