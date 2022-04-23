@@ -112,8 +112,8 @@ if __name__ == '__main__':
         'gamma_value': arguments.gamma,
         'rescale': arguments.rescale,
         'stripes': arguments.stripes,
-        'sigma_min': arguments.sigma_min,
-        'sigma_max': arguments.sigma_max
+        'sigma_min': arguments.min_sigma,
+        'sigma_max': arguments.max_sigma
     }
 
     table = tabulate([[key, preprocessing_kwargs[key]] for key in preprocessing_kwargs], headers=['Parameter', 'Value'])
