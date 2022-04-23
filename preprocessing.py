@@ -88,6 +88,7 @@ if __name__ == '__main__':
                         help='Whether to remove vertical stripes in the diffraction pattern.')
     parser.add_argument('--lazy', action='store_true', help='Whether to work on a lazy signal or not')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
+    parser.add_argument('--no_overwrite', action='store_false', help='Whether to not overwrite any existing preprocessed data')
 
     arguments = parser.parse_args()
 
@@ -131,8 +132,8 @@ if __name__ == '__main__':
     output_path = input_name.with_name(f'{input_name.stem}_preprocessed{input_name.suffix}')
     logger.info(f'Saving signal to {output_path.absolute()}')
     if arguments.lazy:
-        preprocessed_signal.save(output_path, chunks=signal.data.chunksize)
+        preprocessed_signal.save(output_path, chunks=signal.data.chunksize, overwrite=arguments.no_overwrite)
     else:
-        preprocessed_signal.save(output_path)
+        preprocessed_signal.save(output_path, overwrite=arguments.no_overwrite)
 
     logger.info('Finished preprocessing script')
