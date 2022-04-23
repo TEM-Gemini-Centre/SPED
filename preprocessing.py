@@ -87,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--stripes', action='store_true',
                         help='Whether to remove vertical stripes in the diffraction pattern.')
     parser.add_argument('--lazy', action='store_true', help='Whether to work on a lazy signal or not')
+    parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
 
     arguments = parser.parse_args()
 
