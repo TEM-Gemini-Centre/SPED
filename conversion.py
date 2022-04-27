@@ -156,16 +156,19 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
         ny = int(ny)
         logger.debug(f'Scan shape `nx`={nx} (columns) and `ny`={ny} (rows) was specified')
 
-    #Check if scan shape matches number of frames of signal
-    if len(signal) < nx*ny:
-        logger.warning(f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx*ny}). I will attempt to extract a smaller part that make out a proper array based on ny={ny}')
-        complete_rows = int(np.floor(len(signal)%ny))
-        nx = int(len(signal) % complete_rows) #number of columns
-        n = nx*ny
-        logger.info(f'There are {complete_rows} complete rows in the dataset. I will extract {n} frames and make a {nx}x{ny} scan shape')
+    # Check if scan shape matches number of frames of signal
+    if len(signal) < nx * ny:
+        logger.warning(
+            f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx * ny}). I will attempt to extract a smaller part that make out a proper array based on ny={ny}')
+        ny = int(np.floor(len(signal) % ny))
+        nx = int(len(signal) / ny)  # number of columns
+        n = nx * ny
+        logger.info(
+            f'There are {ny} complete rows in the dataset. I will extract {n} frames and make a {nx}x{ny} scan shape')
         signal = signal.inav[:n]
-    elif len(signal) > nx*ny:
-        logger.warning(f'Number of frames in signal ({len(signal)} is larger than specified scan dimensions {nx}x{ny}={n}. This might cause trouble down the road...')
+    elif len(signal) > nx * ny:
+        logger.warning(
+            f'Number of frames in signal ({len(signal)} is larger than specified scan dimensions {nx}x{ny}={n}. This might cause trouble down the road...')
 
     # Get the total shape of the detector. Note that hyperspy switches nx and ny in this sense compared to what the .MIB file uses
     shape = (ny, nx) + detector_shape
@@ -238,11 +241,13 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     if kwargs.get('camera_length', None) is not None:
         try:
             actual_camera_length = \
-            calibrations[kwargs.get('microscope', None)][kwargs.get('camera', None)][kwargs.get('beam_energy', None)][
-                'CL'][kwargs.get('camera_length')]['CL']
+                calibrations[kwargs.get('microscope', None)][kwargs.get('camera', None)][
+                    kwargs.get('beam_energy', None)][
+                    'CL'][kwargs.get('camera_length')]['CL']
             diffraction_scale = \
-            calibrations[kwargs.get('microscope', None)][kwargs.get('camera', None)][kwargs.get('beam_energy', None)][
-                'CL'][kwargs.get('camera_length')]['scale']
+                calibrations[kwargs.get('microscope', None)][kwargs.get('camera', None)][
+                    kwargs.get('beam_energy', None)][
+                    'CL'][kwargs.get('camera_length')]['scale']
             logger.debug(
                 f'Extracted actual camera length ({actual_camera_length} cm) and diffraction scale ({diffraction_scale} 1/Å) from calibration table')
 
@@ -276,29 +281,43 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('filename', type=str, help='Path to a 4D-STEM dataset to convert')
-    parser.add_argument('-x', '--nx', dest='nx', type=int, help='Scan shape in x-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
-    parser.add_argument('-y', '--ny', dest='ny', type=int, help='Scan shape in y-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
-    parser.add_argument('--detector_shape', default=(256, 256), dest='detector_shape', type=int, nargs=2, help='Detector shape')
-    parser.add_argument('--chunks', default=(32, 32, 32, 32), dest='chunks', type=int, nargs=4, help='Chunksize to use in the four different dimensions (x, y, kx, ky)')
+    parser.add_argument('-x', '--nx', dest='nx', type=int,
+                        help='Scan shape in x-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
+    parser.add_argument('-y', '--ny', dest='ny', type=int,
+                        help='Scan shape in y-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
+    parser.add_argument('--detector_shape', default=(256, 256), dest='detector_shape', type=int, nargs=2,
+                        help='Detector shape')
+    parser.add_argument('--chunks', default=(32, 32, 32, 32), dest='chunks', type=int, nargs=4,
+                        help='Chunksize to use in the four different dimensions (x, y, kx, ky)')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite existing converted data')
-    parser.add_argument('--format', dest='format', type=str, default='.hspy', choices=['.hspy', '.hdf5', '.blo'], help='Output fileformat')
-    parser.add_argument('--normalize', dest='normalize', action='store_true', help='Normalize data before conversion. For blockfile conversion, this will always be performed and this argument has no effect')
-    parser.add_argument('--log', dest='log', action='store_true', help='Take the logarithm (base 10) of the data before normalization. Only has an effect if `--normalize` or `--format .blo` is also specified')
-    parser.add_argument('--log_shift', dest='log_shift', type=float, help='Offset to add to the data before doing the logarithm if `--log` or `--format .blo` is given')
+    parser.add_argument('--format', dest='format', type=str, default='.hspy', choices=['.hspy', '.hdf5', '.blo'],
+                        help='Output fileformat')
+    parser.add_argument('--normalize', dest='normalize', action='store_true',
+                        help='Normalize data before conversion. For blockfile conversion, this will always be performed and this argument has no effect')
+    parser.add_argument('--log', dest='log', action='store_true',
+                        help='Take the logarithm (base 10) of the data before normalization. Only has an effect if `--normalize` or `--format .blo` is also specified')
+    parser.add_argument('--log_shift', dest='log_shift', type=float,
+                        help='Offset to add to the data before doing the logarithm if `--log` or `--format .blo` is given')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
 
-    metadata_group = parser.add_argument_group('Optional metadata', 'Optional metadata to be added to the signal. If `beam_energy`, `microscope`, `camera`, and `camera_length` is provided, a diffraction calibration is performed is a match is found in a calibration table.')
+    metadata_group = parser.add_argument_group('Optional metadata',
+                                               'Optional metadata to be added to the signal. If `beam_energy`, `microscope`, `camera`, and `camera_length` is provided, a diffraction calibration is performed is a match is found in a calibration table.')
     metadata_group.add_argument('--dx', dest='dx', type=float, help='Scan step size in x-direction')
     metadata_group.add_argument('--dy', dest='dy', type=float, help='Scan step size in y-direction')
     metadata_group.add_argument('--beam_energy', dest='beam_energy', type=float, default=200, help='Beam energy in kV')
     metadata_group.add_argument('--camera_length', dest='camera_length', type=float, help='Nominal camera length in cm')
     metadata_group.add_argument('--rocking_angle', dest='rocking_angle', type=float, help='Rocking angle in degrees')
-    metadata_group.add_argument('--rocking_frequency', dest='rocking_frequency', type=float, help='Rocking frequency in Hz')
+    metadata_group.add_argument('--rocking_frequency', dest='rocking_frequency', type=float,
+                                help='Rocking frequency in Hz')
     metadata_group.add_argument('--exposure_time', dest='exposure_time', type=float, help='Exposure time in ms')
-    metadata_group.add_argument('--convergence_angle', dest='convergence_angle', type=float, help='Convergence angle in mrad')
-    metadata_group.add_argument('--microscope', dest='microscope', type=str, default='2100F', choices=['2100F'], help='Microscope that the data was acquired on')
-    metadata_group.add_argument('--camera', dest='camera', type=str, default='Merlin', choices=['Merlin'], help='Camera used to acquire the data')
-    metadata_group.add_argument('--mode', dest='mode', type=str, default='NBD', choices=['NBD', 'STEM', 'LMSTEM'], help='Microscope mode used to acquire the data')
+    metadata_group.add_argument('--convergence_angle', dest='convergence_angle', type=float,
+                                help='Convergence angle in mrad')
+    metadata_group.add_argument('--microscope', dest='microscope', type=str, default='2100F', choices=['2100F'],
+                                help='Microscope that the data was acquired on')
+    metadata_group.add_argument('--camera', dest='camera', type=str, default='Merlin', choices=['Merlin'],
+                                help='Camera used to acquire the data')
+    metadata_group.add_argument('--mode', dest='mode', type=str, default='NBD', choices=['NBD', 'STEM', 'LMSTEM'],
+                                help='Microscope mode used to acquire the data')
     metadata_group.add_argument('--spotsize', dest='spotsize', type=float, help='Nominal spotsize in nm')
     metadata_group.add_argument('--operator', dest='operator', type=str, help='Operator')
     metadata_group.add_argument('--specimen', dest='specimen', type=str, help='Specimen')
@@ -311,4 +330,11 @@ if __name__ == '__main__':
     args_as_str = [f'\n\t{arg!r} = {getattr(arguments, arg)}' for arg in vars(arguments)]
     logging.debug(f'Running conversion script with arguments:{"".join(args_as_str)}')
 
-    _ = convert(arguments.filename, arguments.nx, arguments.ny, arguments.detector_shape, arguments.chunks, arguments.overwrite, arguments.dx, arguments.dy, arguments.format, arguments.normalize, arguments.log, arguments.log_shift, beam_energy=arguments.beam_energy, camera_length=arguments.camera_length, rocking_angle=arguments.rocking_angle, rocking_frequency=arguments.rocking_frequency, exposure_time=arguments.exposure_time, convergence_angle=arguments.convergence_angle, microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode, spotsize=arguments.spotsize, operator=arguments.operator, specimen=arguments.specimen, notes=arguments.notes)
+    _ = convert(arguments.filename, arguments.nx, arguments.ny, arguments.detector_shape, arguments.chunks,
+                arguments.overwrite, arguments.dx, arguments.dy, arguments.format, arguments.normalize, arguments.log,
+                arguments.log_shift, beam_energy=arguments.beam_energy, camera_length=arguments.camera_length,
+                rocking_angle=arguments.rocking_angle, rocking_frequency=arguments.rocking_frequency,
+                exposure_time=arguments.exposure_time, convergence_angle=arguments.convergence_angle,
+                microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode,
+                spotsize=arguments.spotsize, operator=arguments.operator, specimen=arguments.specimen,
+                notes=arguments.notes)
