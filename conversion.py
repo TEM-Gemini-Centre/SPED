@@ -156,9 +156,20 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
         ny = int(ny)
         logger.debug(f'`nx`={nx} and `ny`={ny} was specified')
 
+    #Check if scan shape matches number of frames of signal
+    if len(signal) < nx*ny:
+        logger.warning(f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx*ny}). I will attempt to extract a smaller part that make out a proper array based on ny={ny}')
+        complete_rows = int(np.floor(len(signal)%ny))
+        nx = int(len(signal) % complete_rows) #number of columns
+        n = nx*ny
+        logger.info(f'There are {complete_rows} complete rows in the dataset. I will extract {n} frames and make a {nx}x{ny} scan shape')
+        signal = signal.inav[:n]
+    elif len(signal) > nx*ny:
+        logger.warning(f'Number of frames in signal ({len(signal)} is larger than specified scan dimensions {nx}x{ny}={n}. This might cause trouble down the road...')
+
     # Get the total shape of the detector
     shape = (nx, ny) + detector_shape
-    logger.info(f'I will use signal shape {shape} when converting the data')
+    logger.info(f'I will use data shape {shape} when converting the data')
 
     # Get the chunks
     logger.debug(f'Got {chunks} as input. Checking to see if these chunks does not exceed the shape sizes.')
