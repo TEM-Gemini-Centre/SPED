@@ -286,8 +286,10 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
         vbf = signal.isig[cx-vbf_half_width:cx+vbf_half_width, cy-vbf_half_width:cy+vbf_half_width].sum(axis=(2, 3))
         if isinstance(vbf, pxm.signals.LazyDiffraction2D):
             vbf.compute()
+        imdata = vbf.data
+        imdata = (imdata/np.max(imdata)*2**8).astype(np.uint8)
         logger.info(f'Saving VBF image.')
-        imsave(output_path.with_suffix('.png'), vbf.data)
+        imsave(output_path.with_suffix('.png'), imdata)
 
 
 if __name__ == '__main__':
