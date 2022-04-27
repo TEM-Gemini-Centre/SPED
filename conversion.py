@@ -341,6 +341,7 @@ if __name__ == '__main__':
     metadata_group.add_argument('--operator', dest='operator', type=str, help='Operator')
     metadata_group.add_argument('--specimen', dest='specimen', type=str, help='Specimen')
     metadata_group.add_argument('--notes', dest='notes', type=str, help='Notes to add to the metadata fields')
+    metadata_group.add_argument('--scan_rotation', dest='scan_rotation', type=float, help='Scan rotation')
     arguments = parser.parse_args()
 
     log_level = [logging.WARNING, logging.INFO, logging.DEBUG][min([arguments.verbosity, 2])]
@@ -357,4 +358,4 @@ if __name__ == '__main__':
                 exposure_time=arguments.exposure_time, convergence_angle=arguments.convergence_angle,
                 microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode, alpha=arguments.alpha,
                 spotsize=arguments.spotsize, operator=arguments.operator, specimen=arguments.specimen,
-                notes=arguments.notes)
+                scan_rotation=arguments.scan_rotation, notes=arguments.notes)
