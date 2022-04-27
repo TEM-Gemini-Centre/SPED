@@ -150,11 +150,11 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
         logger.debug(f'`ny`={ny} fits `nx` and number of frames')
     else:
         if nx * ny != n:
-            raise ValueError(
-                f'Provided scan shape ({nx}, {ny}) requires {nx * ny} frames, but scan consists of {n} frames.')
+            logger.warning(
+                f'Provided scan shape ({nx}, {ny}) requires {nx * ny} frames, but scan consists of {n} frames. This might be a problem when reshaping the data')
         nx = int(nx)
         ny = int(ny)
-        logger.debug(f'`nx`={nx} and `ny`={ny} was specified')
+        logger.debug(f'Scan shape `nx`={nx} (columns) and `ny`={ny} (rows) was specified')
 
     #Check if scan shape matches number of frames of signal
     if len(signal) < nx*ny:
