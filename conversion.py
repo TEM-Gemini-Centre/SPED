@@ -318,6 +318,8 @@ if __name__ == '__main__':
                                 help='Camera used to acquire the data')
     metadata_group.add_argument('--mode', dest='mode', type=str, default='NBD', choices=['NBD', 'STEM', 'LMSTEM'],
                                 help='Microscope mode used to acquire the data')
+    metadata_group.add_argument('--alpha', dest='alpha', type=int, default=5, choices=[1, 2, 3, 4, 5]
+                                , help='Microscope alpha setting used to acquire data')
     metadata_group.add_argument('--spotsize', dest='spotsize', type=float, help='Nominal spotsize in nm')
     metadata_group.add_argument('--operator', dest='operator', type=str, help='Operator')
     metadata_group.add_argument('--specimen', dest='specimen', type=str, help='Specimen')
@@ -335,6 +337,6 @@ if __name__ == '__main__':
                 arguments.log_shift, beam_energy=arguments.beam_energy, camera_length=arguments.camera_length,
                 rocking_angle=arguments.rocking_angle, rocking_frequency=arguments.rocking_frequency,
                 exposure_time=arguments.exposure_time, convergence_angle=arguments.convergence_angle,
-                microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode,
+                microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode, alpha=arguments.alpha,
                 spotsize=arguments.spotsize, operator=arguments.operator, specimen=arguments.specimen,
                 notes=arguments.notes)
