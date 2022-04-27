@@ -17,6 +17,7 @@ import hyperspy.api as hs
 import pyxem as pxm
 import numpy as np
 from tabulate import tabulate
+from skimage.io import imsave
 
 calibrations = {
     '2100F':
@@ -77,7 +78,7 @@ def load_hdr(filename):
 
 
 def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 32, 32, 32), overwrite=True, dx=None,
-            dy=None, format='.hspy', normalize=False, log=False, log_shift=1, **kwargs):
+            dy=None, format='.hspy', normalize=False, log=False, log_shift=1, vbf=True, vbf_half_width=10, **kwargs):
     """
     Convert a .mib file to .hspy format
     :param filename: The path to the .mib file
@@ -91,6 +92,8 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     :param normalize: Whether to normalize the data during the conversion process. This will store the data in a float32 format which will increase disk storage dramatically.
     :param log: Whether to take a logarithm of the data during the conversion process as part of the normalization routine. If `normalize` is False, this parameter has no effect.
     :param log_shift: An offset to apply to the data before taking the logarithm. This is useful to avoid NaNs in the data where the raw data is zero.
+    :param vbf: Whether to also create a vbf .png image of the data
+    :param vbf_half_width: The half-width of the square used to create a cheap VBF in pixels.
     :param kwargs: Additional keyword arguments to be added to the metadata of the signal. Specify parameters similarly to pyxems `set_experimental_parameters`, as well as providing your own (e.g. `notes="this is a note"). If `microscope`, `camera`, `beam_energy` and `camera_length` are all provided, a diffraction scale calibration from a table will also be performed as long as a match can be found.
     :type filename: Union[str, Path]
     :type nx: Union[None, int]
@@ -103,6 +106,8 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     :type normalize: bool
     :type log: bool
     :type log_shift: Union[int, float]
+    :type vbf: bool
+    :type vbf_radius: int
     :return: converted signal
     :rtype: pxm.signals.LazyElectronDiffraction2D
     """
@@ -159,9 +164,8 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     # Check if scan shape matches number of frames of signal
     if len(signal) < nx * ny:
         logger.warning(
-            f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx * ny}). I will attempt to extract a smaller part that make out a proper array based on ny={ny}')
-        ny = int(np.floor(len(signal) % ny))
-        nx = int(len(signal) / ny)  # number of columns
+            f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx * ny}). I will assume there are {nx} frames in each row and estimate the number of rows based on that')
+        ny = int(np.floor(len(signal) / nx))
         n = nx * ny
         logger.info(
             f'There are {ny} complete rows in the dataset. I will extract {n} frames and make a {nx}x{ny} scan shape')
@@ -276,6 +280,15 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     logger.info(f'Storing converted signal to "{output_path.absolute()}"')
     signal.save(str(output_path), chunks=chunks, overwrite=overwrite)
 
+    if vbf:
+        cx, cy = np.array(signal.axes_manager.signal_shape) // 2  # The center of the diffraction patterns
+        logger.info(f'Creating VBF image using a square centered at {cx}x{cy} and half-width {vbf_half_width}')
+        vbf = signal.isig[cx-vbf_half_width:cx+vbf_half_width, cy-vbf_half_width:cy+vbf_half_width].sum(axis=(2, 3))
+        if isinstance(vbf, pxm.signals.LazyDiffraction2D):
+            vbf.compute()
+        logger.info(f'Saving VBF image.')
+        imsave(output_path.with_suffix('.png'), vbf.data)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -298,6 +311,10 @@ if __name__ == '__main__':
                         help='Take the logarithm (base 10) of the data before normalization. Only has an effect if `--normalize` or `--format .blo` is also specified')
     parser.add_argument('--log_shift', dest='log_shift', type=float,
                         help='Offset to add to the data before doing the logarithm if `--log` or `--format .blo` is given')
+    parser.add_argument('--vbf', action='store_true',
+                        help='Whether to also create a cheap VBF (using a central square as the virtual aperture) image of the dataset')
+    parser.add_argument('--vbf_half_width', dest='vbf_half_width', type=int, default=10,
+                        help='The half-width of the square used to create a VBF.')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
 
     metadata_group = parser.add_argument_group('Optional metadata',
@@ -334,7 +351,8 @@ if __name__ == '__main__':
 
     _ = convert(arguments.filename, arguments.nx, arguments.ny, arguments.detector_shape, arguments.chunks,
                 arguments.overwrite, arguments.dx, arguments.dy, arguments.format, arguments.normalize, arguments.log,
-                arguments.log_shift, beam_energy=arguments.beam_energy, camera_length=arguments.camera_length,
+                arguments.log_shift, arguments.vbf, arguments.vbf_half_width, beam_energy=arguments.beam_energy,
+                camera_length=arguments.camera_length,
                 rocking_angle=arguments.rocking_angle, rocking_frequency=arguments.rocking_frequency,
                 exposure_time=arguments.exposure_time, convergence_angle=arguments.convergence_angle,
                 microscope=arguments.microscope, camera=arguments.camera, mode=arguments.mode, alpha=arguments.alpha,
