@@ -167,8 +167,8 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     elif len(signal) > nx*ny:
         logger.warning(f'Number of frames in signal ({len(signal)} is larger than specified scan dimensions {nx}x{ny}={n}. This might cause trouble down the road...')
 
-    # Get the total shape of the detector
-    shape = (nx, ny) + detector_shape
+    # Get the total shape of the detector. Note that hyperspy switches nx and ny in this sense compared to what the .MIB file uses
+    shape = (ny, nx) + detector_shape
     logger.info(f'I will use data shape {shape} when converting the data')
 
     # Get the chunks
