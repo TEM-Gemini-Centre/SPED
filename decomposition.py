@@ -122,7 +122,7 @@ if __name__ == '__main__':
               output_dimension=arguments.components, navmask=navmask, diffmask=diffmask)
 
     suffix = ''
-    if arguments.normalize_poissonian_noise:
+    if arguments.poissonian:
         suffix += '_poissonian'
     if diffmask is not None:
         suffix += '_diffmask'
