@@ -111,6 +111,16 @@ if __name__ == '__main__':
     else:
         navmask = None
 
+    suffix = ''
+    if arguments.poissonian:
+        suffix += '_poissonian'
+    if diffmask is not None:
+        suffix += '_diffmask'
+    if navmask is not None:
+        suffix += '_navmask'
+    output_name = arguments.output_path / f'{arguments.hs_file.stem}_{arguments.algorithm}_{arguments.components}{suffix}{arguments.hs_file.suffix}'
+    logger.info(f'I will output data to "{output_name.absolute()}"')
+
     logger.info(f'Loading data signal "{arguments.hs_file.absolute()}')
     signal = hs.load(arguments.hs_file.absolute(), lazy=arguments.lazy)
 
@@ -121,16 +131,7 @@ if __name__ == '__main__':
     decompose(signal, normalize_poissonian_noise=arguments.poissonian, algorithm=arguments.algorithm,
               output_dimension=arguments.components, navmask=navmask, diffmask=diffmask)
 
-    suffix = ''
-    if arguments.poissonian:
-        suffix += '_poissonian'
-    if diffmask is not None:
-        suffix += '_diffmask'
-    if navmask is not None:
-        suffix += '_navmask'
-
-    output_name = arguments.output_path / f'{arguments.hs_file.stem}_{arguments.algorithm}_{arguments.output_components}{suffix}{arguments.hs_file.suffix}'
-
+    #File saving
     if arguments.save_new_signal:
         logger.info(f'Saving decomposed signal to "{output_name}"')
         signal.save(output_name.absolute(), overwrite=arguments.no_overwrite)
@@ -146,4 +147,4 @@ if __name__ == '__main__':
         loadings.save(output_name.with_name(f'{output_name.stem}_loadings{output_name.suffix}'), overwrite=True)
         factors.save(output_name.with_name(f'{output_name.stem}_factors{output_name.suffix}'), overwrite=True)
 
-    logger.info(f'Finished')
+    logger.info(f'Finished decomposition script')
