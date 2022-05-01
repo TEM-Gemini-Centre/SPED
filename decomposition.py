@@ -118,7 +118,7 @@ if __name__ == '__main__':
         suffix += '_diffmask'
     if navmask is not None:
         suffix += '_navmask'
-    output_name = arguments.output_path / f'{arguments.hs_file.stem}_{arguments.algorithm}_{arguments.components}{suffix}{arguments.hs_file.suffix}'
+    output_name = output_path / f'{arguments.hs_file.stem}_{arguments.algorithm}_{arguments.components}{suffix}{arguments.hs_file.suffix}'
     logger.info(f'I will output data to "{output_name.absolute()}"')
 
     logger.info(f'Loading data signal "{arguments.hs_file.absolute()}')
