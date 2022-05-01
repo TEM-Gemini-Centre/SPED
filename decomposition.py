@@ -72,8 +72,8 @@ if __name__ == '__main__':
                         help='Save the signal with the decomposition results to a new file. This duplicates the raw data as well')
     parser.add_argument('--save_learning_results', action='store_true', help='Save learning results in separate files')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
-    parser.add_argument('--no_overwrite', action='store_false',
-                        help='Whether to not overwrite existing signals')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Whether to overwrite existing signals')
 
     arguments = parser.parse_args()
 
@@ -121,6 +121,9 @@ if __name__ == '__main__':
     output_name = output_path / f'{arguments.hs_file.stem}_{arguments.algorithm}_{arguments.components}{suffix}{arguments.hs_file.suffix}'
     logger.info(f'I will output data to "{output_name.absolute()}"')
 
+    if not arguments.overwrite:
+        logger.warning(f'I will not overwrite existing files.')
+
     logger.info(f'Loading data signal "{arguments.hs_file.absolute()}')
     signal = hs.load(arguments.hs_file.absolute(), lazy=arguments.lazy)
 
@@ -134,17 +137,18 @@ if __name__ == '__main__':
     #File saving
     if arguments.save_new_signal:
         logger.info(f'Saving decomposed signal to "{output_name}"')
-        signal.save(output_name.absolute(), overwrite=arguments.no_overwrite)
+        signal.save(output_name.absolute(), overwrite=arguments.overwrite)
     else:
-        logger.info(f'Overwriting datafile with decomposed signal (saving to "{arguments.hs_file.absolute()}")')
-        signal.save(arguments.hs_file.absolute(), overwrite=True)
+        if arguments.overwrite:
+            logger.info(f'Overwriting datafile with decomposed signal (saving to "{arguments.hs_file.absolute()}")')
+            signal.save(arguments.hs_file.absolute(), overwrite=arguments.overwrite)
 
     if arguments.save_learning_results:
         logger.info(f'Saving learning results to "{output_name}" (with _loadings and _factors name identifiers)')
         loadings = signal.get_decomposition_loadings()
         factors = signal.get_decomposition_factors()
 
-        loadings.save(output_name.with_name(f'{output_name.stem}_loadings{output_name.suffix}'), overwrite=True)
-        factors.save(output_name.with_name(f'{output_name.stem}_factors{output_name.suffix}'), overwrite=True)
+        loadings.save(output_name.with_name(f'{output_name.stem}_loadings{output_name.suffix}'), overwrite=arguments.overwrite)
+        factors.save(output_name.with_name(f'{output_name.stem}_factors{output_name.suffix}'), overwrite=arguments.overwrite)
 
     logger.info(f'Finished decomposition script')
