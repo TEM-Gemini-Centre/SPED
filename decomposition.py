@@ -59,7 +59,7 @@ if __name__ == '__main__':
     parser.add_argument('hs_file', type=Path, help='The HyperSpy .hdf5 file to decompose')
     parser.add_argument('--poissonian', action='store_true',
                         help=r'Whether to account for possionian noise or not. Default is False')
-    parser.add_argument('--components', default=10, type=int, help='Output components')
+    parser.add_argument('--components', default=None, type=int, help='Output components')
     parser.add_argument('--algorithm', nargs='?', type=str, default='svd',
                         choices=["SVD", "MLPCA", "sklearn_pca", "NMF", "sparse_pca", "mini_batch_sparse_pca", "RPCA",
                                  "ORPCA", "ORNMF"], help='Decomposition algorithm')
