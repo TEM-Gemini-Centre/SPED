@@ -31,7 +31,7 @@ if __name__ == '__main__':
     signal = hs.load(input_name, lazy=arguments.lazy)
 
     #Rebin signal
-    rebinned_signal = signal.rebin(scale=arguments.scales)
+    rebinned_signal = signal.rebin(scale=arguments.scale)
 
     scales_as_string = '_'.join([f'{scale:.0f}' for scale in arguments.scale])
     output_name = input_name.with_name(f'{input_name.stem}_rebinned_{scales_as_string}{input_name.suffix}')
