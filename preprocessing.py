@@ -95,7 +95,7 @@ def process_image(image, map_min_to_zero=True, background_subtract_function=None
 
     if rescale:
         # remap intensities to different range
-        image = rescale_intensity(image, in_range='image', out_range=rescale_range)
+        image = rescale_intensity(image, in_range='image', out_range=tuple(rescale_range))
 
     return image
 
