@@ -186,7 +186,7 @@ if __name__ == '__main__':
         'erode': arguments.erode,
         'footprint': disk(arguments.footprint),
         'rescale': arguments.rescale,
-        'out_range': arguments.rescale_range,
+        'out_range': tuple(arguments.rescale_range),
         'plot_steps': False
     }
 
