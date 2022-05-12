@@ -15,6 +15,7 @@ import argparse
 from pathlib import Path
 import hyperspy.api as hs
 import numpy as np
+import matplotlib.pyplot as plt
 import pickle
 from tabulate import tabulate
 
@@ -37,66 +38,101 @@ def subtract_background_dog(array, sigma_min, sigma_max):
     """
     Subtract the background of a 2D array using difference of gaussians (DOG)
 
-    If the array is not a float array, it will be typecasted into a float array in this function.
     :param array: The image
     :param sigma_min: The lower sigma
     :param sigma_max: The upper sigma
     :return:
     """
-    if not array.dtype == float:
-        array = array.astype(float)
     blur_max = gaussian_filter(array, sigma_max)
     blur_min = gaussian_filter(array, sigma_min)
     return np.maximum(np.where(blur_min > blur_max, array, 0) - blur_max, 0)
 
 
-def process_image(image, map_min_to_zero=True, background_subtract_function=None, blur_sigma=None, min_intensity=None,
-                  gamma_value=None, rescale=True, erode=False, footprint=6, rescale_range='dtype', **kwargs):
+def process_image(image, subtract_min=False, background_subtract_function=None, background_subtract_kwargs=None, sigma=None,
+                  gamma=None, erode=False, footprint=disk(3), rescale=False, out_range=(0, 1), plot_steps=False,
+                  **kwargs):
     """
-    Process an image and prepare it for templatematching
+    Process an image for templatematching
 
-    :param image: The image to prepare
-    :param map_min_to_zero: Whether to map the minimum intensity to zero (1st step)
-    :param background_subtract_function: Whether to perform a background subtraction (2nd step)
-    :param blur_sigma: The sigma to blur the image with (3rd step)
-    :param min_intensity: The minimum intensity to keep after the three first steps (4th step). Intensities lower than this will be set to zero
-    :param gamma_value: The gamma correction value (5th step)
-    :param erode: Whether to erode the image after the 5th step (6th step)
-    :param footprint: The erosion footprint
-    :param rescale: Whether to rescale the image after the 6th step.
-    :param rescale_range: The range of the output array. Default is to stretch it between the image dtype bounds.
-    :param kwargs: Optional keyword arguments passed to the background subtract function.
-    :return:
+    Applies a series of image processing steps in the following order:
+     - typecasting to float32
+     - subtraction of minimum
+     - background subtraction
+     - gaussian blur
+     - gamma correction
+     - erosion
+     - rescaling
+     - typecasting to signed int16
+
+    :param image: the image to process
+    :param subtract_min: Whether to subtract the minimum intensity from the image
+    :param background_subtract_function: Function to use for subtracting background
+    :param background_subtract_kwargs: Keyword arguments passed to background subtract function
+    :param sigma: sigma used in gaussian blurring
+    :param erode: Whether to erode the image or not
+    :param footprint: The erosion footprint, typically disk(3) or similar
+    :param rescale: Whether to rescale the processed image
+    :param out_range: The rescaling output range
+    :param plot_steps: Whether to plot the steps or not.
+    :param kwargs: Optional keyword arguments passed to matplotlib.pyplot.imshow if steps are plotted
+    :type image: numpy.ndarray
+    :type subtract_min: bool
+    :type background_subtract_function: function
+    :type background_subtract_kwargs: dict
+    :type sigma: Union[int, float]
+    :type gamma: Union[int, float]
+    :type erode: bool
+    :type footprint: numpy.ndarray
+    :type rescale: bool
+    :type out_range: 2-tuple
+    :type plot_steps: bool
     """
+    if plot_steps:
+        images = {'raw': image}
 
-    if map_min_to_zero:
-        # Subtract minimum intensity
-        image = image - image.min()
+    image = np.float32(image)
+    if subtract_min:
+        image = image - np.min(image)
+        if plot_steps:
+            images['min'] = image
 
     if background_subtract_function is not None:
-        # Remove background
-        image = background_subtract_function(image, **kwargs)
+        if background_subtract_kwargs is None:
+            background_subtract_kwargs = {}
+        image = background_subtract_function(image, **background_subtract_kwargs)
+        if plot_steps:
+            images['bcknd'] = image
 
-    if blur_sigma is not None:
-        # blur the image
-        image = skifi.gaussian(image, sigma=blur_sigma)
+    if sigma is not None:
+        image = skifi.gaussian(image, sigma=sigma)
+        if plot_steps:
+            images[f'$\sigma=${sigma}'] = image
 
-    if min_intensity is not None:
-        # remove low intensity pixels
-        image[image < min_intensity] = 0
-
-    if gamma_value is not None:
-        # change the gamma of the images
-        image = image ** gamma_value
+    if gamma is not None:
+        image = image ** gamma
+        if plot_steps:
+            images[f'$\gamma$={gamma}'] = image
 
     if erode:
-        # erode the image
-        image = erosion(image, disk(footprint))
+        image = erosion(image, footprint=footprint)
+        if plot_steps:
+            images['erosion'] = image
 
     if rescale:
-        # remap intensities to different range
-        image = rescale_intensity(image, in_range='image', out_range=tuple(rescale_range))
+        image = rescale_intensity(image, in_range='image', out_range=out_range)
+        if plot_steps:
+            images[f'rescaled {out_range}'] = image
 
+    image = np.int16(image)
+    if plot_steps:
+        images[f'int16 ({np.min(image)}, {np.max(image)})'] = image
+
+    if plot_steps:
+        fig, axes = plt.subplots(nrows=1, ncols=len(images), figsize=(3 * len(images), 3), sharex=True, sharey=True,
+                                 subplot_kw={'xticks': [], 'yticks': []})
+        for ax, label in zip(axes, images):
+            ax.imshow(images[label], **kwargs)
+            ax.set_title(label)
     return image
 
 
@@ -109,16 +145,12 @@ if __name__ == '__main__':
     parser.add_argument('--min_sigma', type=float, default=3, help='Minimum sigma to use in background subtraction DOG')
     parser.add_argument('--max_sigma', type=float, default=8, help='Maximum sigma to use in background subtraction DOG')
     parser.add_argument('--blur_sigma', type=float, help='Sigma used in gaussian blurring')
-    parser.add_argument('--min_intensity', type=float,
-                        help='Lower intensity threshold. Intensities below this value will be set to zero.')
     parser.add_argument('--gamma', type=float, help='Gamma value used to gamma-scale the images')
     parser.add_argument('--rescale', action='store_true',
                         help='Whether to rescale intensities after preprocessing')
-    parser.add_argument('--rescale_range', type=float, nargs=2, default=[0, 1], help='The output intensity range')
+    parser.add_argument('--rescale_range', type=float, nargs=2, default=[-0.02 * (2 ** 15 + 1), 1.0 * 2 ** 15 - 1], help='The output intensity range')
     parser.add_argument('--erode', action='store_true', help='Whether to erode the data using a footprint or not')
-    parser.add_argument('--footprint', type=int, default=6, help='The erosion footprint')
-    parser.add_argument('--stripes', action='store_true',
-                        help='Whether to remove vertical stripes in the diffraction pattern.')
+    parser.add_argument('--footprint', type=int, default=3, help='The erosion footprint')
     parser.add_argument('--lazy', action='store_true', help='Whether to work on a lazy signal or not')
     parser.add_argument('-v', '--verbose', dest='verbosity', default=0, action='count', help='Set verbose level')
     parser.add_argument('--no_overwrite', action='store_false',
@@ -138,19 +170,24 @@ if __name__ == '__main__':
     signal = hs.load(input_name, lazy=arguments.lazy)
     logger.debug(f'Loaded signal {signal}')
 
+    if arguments.background_subtract:
+        background_subtract_function = subtract_background_dog
+    else:
+        background_subtract_function = None
     # Preprocessing
     preprocessing_kwargs = {
-        'map_min_to_zero': arguments.map_min_to_zero,
-        'background_subtract_function': subtract_background_dog,
-        'blur_sigma': arguments.blur_sigma,
-        'min_intensity': arguments.min_intensity,
-        'gamma_value': arguments.gamma,
+        'subtract_min': arguments.map_min_to_zero,
+        'background_subtract_function': background_subtract_function,
+        'background_subtract_kwargs': {
+            'sigma_min': arguments.min_sigma,
+            'sigma_max': arguments.max_sigma},
+        'sigma': arguments.blur_sigma,
+        'gamma': arguments.gamma,
+        'erode': arguments.erode,
+        'footprint': disk(arguments.footprint),
         'rescale': arguments.rescale,
         'rescale_range': arguments.rescale_range,
-        'erode': arguments.erode,
-        'footprint': arguments.footprint,
-        'sigma_min': arguments.min_sigma,
-        'sigma_max': arguments.max_sigma,
+        'plot_steps': False
     }
 
     table = tabulate([[key, preprocessing_kwargs[key]] for key in preprocessing_kwargs], headers=['Parameter', 'Value'])
@@ -163,6 +200,9 @@ if __name__ == '__main__':
     preprocessed_signal.change_dtype(np.float32)
     logger.info(f'Running preprocessing on {signal}')
     preprocessed_signal.map(process_image, **preprocessing_kwargs)
+    if arguments.lazy:
+        logger.info(f'Computing lazy signal')
+        preprocessed_signal.compute()
     logger.info(f'Finished preprocessing')
 
     output_path = input_name.with_name(f'{input_name.stem}_preprocessed{input_name.suffix}')
