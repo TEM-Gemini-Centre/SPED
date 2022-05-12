@@ -186,7 +186,7 @@ if __name__ == '__main__':
         'erode': arguments.erode,
         'footprint': disk(arguments.footprint),
         'rescale': arguments.rescale,
-        'rescale_range': arguments.rescale_range,
+        'out_range': arguments.rescale_range,
         'plot_steps': False
     }
 
@@ -196,8 +196,6 @@ if __name__ == '__main__':
     # Apply processing
     logger.debug(f'Copying signal')
     preprocessed_signal = signal.deepcopy()
-    logger.debug(f'Changing datatype to float32')
-    preprocessed_signal.change_dtype(np.float32)
     logger.info(f'Running preprocessing on {signal}')
     preprocessed_signal.map(process_image, **preprocessing_kwargs)
     if arguments.lazy:
