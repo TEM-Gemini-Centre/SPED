@@ -14,6 +14,7 @@ logger.addHandler(ch)
 import argparse
 from pathlib import Path
 import hyperspy.api as hs
+from pyxem.signals import LazyDiffraction2D
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
@@ -90,7 +91,11 @@ def process_image(image, subtract_min=False, background_subtract_function=None, 
     if plot_steps:
         images = {'raw': image}
 
-    image = np.float32(image)
+    if isinstance(image, LazyDiffraction2D):
+        image = image.change_dtype('float32', rechunk=False)
+    else:
+        image = image.astype('float32')
+
     if subtract_min:
         image = image - np.min(image)
         if plot_steps:
