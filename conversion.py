@@ -114,7 +114,8 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
 
     filename = Path(filename)
     logger.info(f'Loading data "{filename.absolute()}" for conversion')
-    signal = pxm.load_mib(str(filename), reshape=False)
+    #signal = pxm.load_mib(str(filename), reshape=False)
+    signal = hs.load(str(filename), reshape=False)
     logger.debug(f'Loaded signal {signal}')
 
     try:
