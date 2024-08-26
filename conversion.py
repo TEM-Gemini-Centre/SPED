@@ -77,7 +77,7 @@ def load_hdr(filename):
     return hdr_content
 
 
-def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 32, 32, 32), overwrite=True, dx=None,
+def convert(filename, nx=None, ny=None, chunks=(32, 32), overwrite=True, dx=None,
             dy=None, format='.hspy', normalize=False, log=False, log_shift=1, vbf=True, vbf_half_width=10, **kwargs):
     """
     Convert a .mib file to .hspy format
@@ -126,96 +126,22 @@ def convert(filename, nx=None, ny=None, detector_shape=(256, 256), chunks=(32, 3
     else:
         logger.debug(f'Read header contents from {filename.with_suffix(".hdr")})')
 
-    # Get the shape of the scan
-    n = len(signal)  # number of frames in signal
-    logger.debug(f'Signal {signal} has {n} frames')
-    if nx is None and ny is None:
-        logger.debug(f'Both `nx` and `ny` is set to None')
-        if np.sqrt(n) % 1 == 0:  # square scan
-            logger.debug(f'Scan is square (sqrt(n)={np.sqrt(n)} is a whole number with sqrt(n)%1={np.sqrt(n) % 1})')
-            nx = int(np.sqrt(n))
-            ny = int(np.sqrt(n))
-        else:
-            raise ValueError(
-                f'Could not estimate scan shape for file "{filename.absolute}" with {n} frames. Parameters `nx` and/or `ny` are required for non-square scans (Scan has {n} frames with square root size {np.sqrt(n)}).')
-    elif nx is None:
-        logger.debug(f'`ny` is specified ({ny}). Attempting to estimate `nx`')
-        nx = n / ny
-        if nx % 1 != 0:
-            raise ValueError(
-                f'Could not estimate scan shape for file "{filename.absolute}" with {n} frames. Parameter `ny`={ny} is not compatible with the number of frames and would require a non-integer frames in other direction ({nx})')
-        nx = int(nx)
-        logger.debug(f'`nx`={nx} fits `ny` and number of frames')
-    elif ny is None:
-        logger.debug(f'`nx` is specified ({nx}). Attempting to estimate `ny`')
-        ny = n / nx
-        if ny % 1 != 0:
-            raise ValueError(
-                f'Could not estimate scan shape for file "{filename.absolute}" with {n} frames. Parameter `nx`={nx} is not compatible with the number of frames and would require a non-integer frames in other direction ({ny})')
-        ny = int(ny)
-        logger.debug(f'`ny`={ny} fits `nx` and number of frames')
-    else:
-        if nx * ny != n:
-            logger.warning(
-                f'Provided scan shape ({nx}, {ny}) requires {nx * ny} frames, but scan consists of {n} frames. This might be a problem when reshaping the data')
-        nx = int(nx)
-        ny = int(ny)
-        logger.debug(f'Scan shape `nx`={nx} (columns) and `ny`={ny} (rows) was specified')
-
-    # Check if scan shape matches number of frames of signal
-    if len(signal) < nx * ny:
-        logger.warning(
-            f'Dataset {signal} has too few frames (expected {nx}x{ny}={nx * ny}). I will assume there are {nx} frames in each row and estimate the number of rows based on that')
-        ny = int(np.floor(len(signal) / nx))
-        n = nx * ny
-        logger.info(
-            f'There are {ny} complete rows in the dataset. I will extract {n} frames and make a {nx}x{ny} scan shape')
-        signal = signal.inav[:n]
-    elif len(signal) > nx * ny:
-        logger.warning(
-            f'Number of frames in signal ({len(signal)} is larger than specified scan dimensions {nx}x{ny}={n}. This might cause trouble down the road...')
-
-    # Get the total shape of the detector. Note that hyperspy switches nx and ny in this sense compared to what the .MIB file uses
-    shape = (ny, nx) + detector_shape
-    logger.info(f'I will use data shape {shape} when converting the data')
-
-    # Get the chunks
-    logger.debug(f'Got {chunks} as input. Checking to see if these chunks does not exceed the shape sizes.')
-    chunks = tuple([chunk if chunk < shape[i] else shape[i] for i, chunk in
-                    enumerate(chunks)])  # Make certain that the chunks are not larger than the shape of the dimensions
-    logger.info(f'I will use chunk sizes {chunks} when converting the data')
-
-    data_array = signal.data
-    data_array = data_array.reshape(shape)
-    logger.info(f'Reshaped data')
-    data_array = data_array.rechunk(chunks)
-    logger.info(f'Rechunked data')
-
     if normalize or format == '.blo':
         logger.debug('Normalizing data')
         if log:
             logger.debug(
                 f'Taking the logarithm (base 10 with an offset of {log_shift}) of the data before normalization')
-            data_array = np.log10(data_array + log_shift)
-        data_array = data_array / np.nanmax(data_array)
+            signal = np.log10(signal + log_shift)
+        signal = signal / signal.max(axis=[0,1,2,3]).data
         logger.info(f'Normalized data')
 
     if format == '.blo':
         logger.debug('Rescaling data to 8-bit limits for blockfile conversion')
-        data_array = data_array * 2 ** 8
+        signal = signal * 2 ** 8
 
-    signal = pxm.signals.LazyElectronDiffraction2D(data_array)
-    logger.info(f'Recreated reshaped signal: {signal}')
-
-    logger.info(f'Setting signal metadata')
-
-    signal.original_metadata.add_dictionary({'HDR': hdr})
-    signal.metadata.add_dictionary({'HDR': hdr})
-    if hdr is not None:
-        logger.info(f'Added HDR metadata')
-    else:
-
-        logger.info(f'Added HDR metadata, even though it is {hdr}')
+    logger.debug(f'Rechunking signal to use {chunks[0]} in the navigation dimension and {chunks[1]} in the signal dimension')
+    signal = signal.rechunk(nav_chunks = chunks[0], sig_chunks=chunks[1])
+    logger.debug(f'Rechunked signal:\n{signal}')
 
     # Get the scan calibration
     if dx is None and dy is None:
@@ -301,10 +227,8 @@ if __name__ == '__main__':
                         help='Scan shape in x-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
     parser.add_argument('-y', '--ny', dest='ny', type=int,
                         help='Scan shape in y-direction. Not required for square scans. Either x or y shape must be given for non-square scans.')
-    parser.add_argument('--detector_shape', default=(256, 256), dest='detector_shape', type=int, nargs=2,
-                        help='Detector shape')
-    parser.add_argument('--chunks', default=(32, 32, 32, 32), dest='chunks', type=int, nargs=4,
-                        help='Chunksize to use in the four different dimensions (x, y, kx, ky)')
+    parser.add_argument('--chunks', default=(32, 32), dest='chunks', type=int, nargs=2,
+                        help='Chunksize to use in the for the navigation and signal spaces')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite existing converted data')
     parser.add_argument('--format', dest='format', type=str, default='.hspy', choices=['.hspy', '.hdf5', '.blo'],
                         help='Output fileformat')
@@ -353,7 +277,7 @@ if __name__ == '__main__':
     args_as_str = [f'\n\t{arg!r} = {getattr(arguments, arg)}' for arg in vars(arguments)]
     logging.debug(f'Running conversion script with arguments:{"".join(args_as_str)}')
 
-    _ = convert(arguments.filename, arguments.nx, arguments.ny, arguments.detector_shape, arguments.chunks,
+    _ = convert(arguments.filename, arguments.nx, arguments.ny, arguments.chunks,
                 arguments.overwrite, arguments.dx, arguments.dy, arguments.format, arguments.normalize, arguments.log,
                 arguments.log_shift, arguments.vbf, arguments.vbf_half_width, beam_energy=arguments.beam_energy,
                 camera_length=arguments.camera_length,
