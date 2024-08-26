@@ -139,9 +139,9 @@ def convert(filename, nx=None, ny=None, chunks=(32, 32), overwrite=True, dx=None
         logger.debug('Rescaling data to 8-bit limits for blockfile conversion')
         signal = signal * 2 ** 8
 
-    logger.debug(f'Rechunking signal to use {chunks[0]} in the navigation dimension and {chunks[1]} in the signal dimension')
-    signal = signal.rechunk(nav_chunks = chunks[0], sig_chunks=chunks[1])
-    logger.debug(f'Rechunked signal:\n{signal}')
+    #logger.debug(f'Rechunking signal to use {chunks[0]} in the navigation dimension and {chunks[1]} in the signal dimension')
+    #signal = signal.rechunk(nav_chunks = chunks[0], sig_chunks=chunks[1])
+    #logger.debug(f'Rechunked signal:\n{signal}')
 
     # Get the scan calibration
     if dx is None and dy is None:
