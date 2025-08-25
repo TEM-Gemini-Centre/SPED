@@ -203,8 +203,10 @@ def convert(filename, nx=None, ny=None, chunks=(32, 32), overwrite=True, dx=None
     logger.info(
         f'Converted signal {signal} has axes manager:\n{signal.axes_manager}\nand metadata data:\n{signal.metadata}')
 
+    chunks = chunks + (32, 32)
+
     output_path = filename.with_name(f'{filename.stem}{format}')
-    logger.info(f'Storing converted signal to "{output_path.absolute()}"')
+    logger.info(f'Storing converted signal to "{output_path.absolute()}" in {chunks} chunks')
     signal.save(str(output_path), chunks=chunks, overwrite=overwrite)
 
     if vbf:
