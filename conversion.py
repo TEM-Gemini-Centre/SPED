@@ -207,7 +207,11 @@ def convert(filename, nx=None, ny=None, chunks=(32, 32), overwrite=True, dx=None
 
     output_path = filename.with_name(f'{filename.stem}{format}')
     logger.info(f'Storing converted signal to "{output_path.absolute()}" in {chunks} chunks')
-    signal.save(str(output_path), chunks=chunks, overwrite=overwrite)
+    try:
+        signal.save(str(output_path), chunks=chunks, overwrite=overwrite)
+    except Exception as e:
+        logger.error(f'Could not save signal due to error {e}. Trying again without using specified chunking')
+        signal.save(str(output_path), overwrite=overwrite)
 
     if vbf:
         cx, cy = np.array(signal.axes_manager.signal_shape) // 2  # The center of the diffraction patterns
